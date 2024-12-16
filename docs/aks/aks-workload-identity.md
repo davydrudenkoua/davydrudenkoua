@@ -11,11 +11,37 @@ Managed Identity is a resource in Azure  that provides an identity for your appl
 | **Identity Scope**   | Defined by the user              | Single Azure resource                   |
 | **Reusability**      | Can be used by multiple services | Limited to one resource                 |
 | **Setup complexity** | Low                              | Moderate                                |
-
 #### How it works?
 Workload Identity maps Kubernetes Service Account to a User-assigned Managed Identity in Azure and closely integrates with RBAC. You simply create Role Assignments for your identity in Azure and your application uses them to access other resources. This setup allows Kubernetes pods to have specific permissions in Azure without the need to directly manage any credentials. 
 Pods use their Kubernetes service accounts to request access tokens using OIDC federation. Pod's service account token is used to authenticate with Azure AD. Azure AD validates the OIDC token and issues an access token for the managed identity associated with the service account, granting access to Azure resources.
 ![](./aks-wi-overview.png)
+### API to be deployed
+In this tutorial we will be deploying a simple Python API built using FastAPI with three endpoints:
+- `GET /service`
+    Returns hardcoded `{"service-name": "cats-api"}`. This endpoint exists for simple checks if the app is running.
+- `GET "/cat/{user}"`
+    Returns signed URL for a picture of user's cat
+- `POST "/cat/{user}"`
+    You can use this endpoint to upload new user's cat picture. This will store new blob named 'cat' in `cats` container under `{User}` path.
+    For example, `POST /cat/Davyd` will save your upload to `cats` container at `Davyd/cat`.
+You can find all code for the API and PowerShell script used to setup AKS in [my repository](https://github.com/davydrudenkoua/k8s-workload-identity)
+#### Using Workload Identity in your code
+Remember that point about not having to manage any credentials or connection strings in code? It sounded like magic to me, but here is how it looks in code:
+```python
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient
+
+class CatPicsStorageService:
+    def __init__(self):
+        self.container_name = "cats"
+        self.account_name = "davydscats"
+
+        self.blob_service_client = BlobServiceClient(
+            account_url=f"https://{self.account_name}.blob.core.windows.net",
+            credential=DefaultAzureCredential()
+        )
+```
+Simple, right?
 ### Setting up you AKS cluster to use Workload Identities
 In this tutorial we will setup a new AKS cluster for use with Workload Identities. It will have one pod running a simple Python FastAPI server deployed from a private Docker Hub registry that will create signed URLs to access files in Blob Storage. For this it will need `Blob Storage Contributor` role in that storage account. You can find all source code in my [GitHub repository](https://github.com/davydrudenkoua/k8s-workload-identity).
 #### Prerequisites
